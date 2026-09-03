@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Τέχνη Γραμματική </title>
+    <link rel='preconnect' href='https://fonts.googleapis.com'>
+    <link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+    <link href='https://fonts.googleapis.com/css2?family=Gentium+Plus:ital,wght@0,400;0,700;1,400;1,700&display=swap' rel='stylesheet'>
+    <link rel='stylesheet' href='grammarLook.css'>
+    <link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/alpheios-components@latest/dist/style/style-components.min.css'>
+</head>
+<body>
+    <header class='site-header'>
+        <h1>Τέχνη Γραμματική </h1>
+        <div class='primary-controls'>
+            <div class='search-container'>
+                <a href="https://www.lexilogos.com/keyboard/greek_ancient.htm" 
+                    target='_blank' 
+                    rel='noopener noreferrer'
+                    id='greek-keyboard-btn'
+                    title='Open Ancient Greek keyboard'>ΑΒΓ</a>
+                <input type='text' id='search-input' placeholder='Search Greek or English…' autocomplete='off' spellcheck='false'>
+                <button type='button' id='search-button'>Find</button>
+            </div>
+            <div id='section-nav'>
+                <label for='section-select'>Jump to section</label>
+                <select id='section-select'>
+                    <option value=''>— Choose section —</option>
+                </select>
+            </div>
+        </div>
+        <div class='toggle-row'>
+            <label class='english-toggle'>
+                <input type='checkbox' id='english-toggle'> Show English
+            </label>
+            <div class='export-controls'>
+                <label for='export-lang'>Export:</label>
+                <select id='export-lang'>
+                    <option value='both'>Greek + English</option>
+                    <option value='greek'>Greek only</option>
+                    <option value='english'>English only</option>
+                </select>
+                <button type='button' class='export-btn' data-format='txt'>TXT</button>
+                <button type='button' class='export-btn' data-format='md'>MD</button>
+                <button type='button' class='export-btn' data-format='xml'>XML</button>
+                <button type='button' class='export-btn' data-format='json'>JSON</button>
+                <button type='button' class='export-btn' data-format='pdf'>PDF</button>
+            </div>
+        </div>
+    </header>
+    <div id="grammar-container"></div>
+    <button id='back-to-top' title='Return to top'>↑</button>
+    <script src='grammScr.js'></script>
+</body>
+</html>
