@@ -387,11 +387,11 @@ async function loadGrammar() {
             }
             function escapeXml(str) {
                 return str
-                    .replace(/&/g, '&')
-                    .replace(/</g, '<')
-                    .replace(/>/g, '>')
-                    .replace(/"/g, '"')
-                    .replace(/'/g, ''');
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&apos;');
             }
             function exportPdf(sections, mode) {
                 const win = window.open('', '_blank');
@@ -479,10 +479,11 @@ setTimeout(function () { window.print(); }, 300);
             }
             function escapeHtml(str) {
                 return str
-                    .replace(/&/g, '&')
-                    .replace(/</g, '<')
-                    .replace(/>/g, '>')
-                    .replace(/"/g, '"');
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
             }
             buttons.forEach(btn => {
                 btn.addEventListener('click', () => {
