@@ -101,15 +101,12 @@ async function loadGrammar() {
         const englishToggle = document.getElementById('english-toggle');
         function setEnglish(on) {
             document.body.classList.toggle('english-on', on);
-            localStorage.setItem('grammar-english-visible', on ? '1' : '0');
         }
+        englishToggle.checked = false;
+        setEnglish(false);
         englishToggle.addEventListener('change', () => {
             setEnglish(englishToggle.checked);
         });
-        if (localStorage.getItem('grammar-english-visible') === '1') {
-            englishToggle.checked = true;
-            setEnglish(true);
-        }
         function goToSectionFromHash() {
             const hash = window.location.hash;
             if (hash && hash.startsWith('#section-')) {
@@ -122,14 +119,15 @@ async function loadGrammar() {
                 }
             }
         }
-        goToSectionFromHash();
         window.addEventListener('hashchange', goToSectionFromHash);
         (function () {
             const input = document.getElementById('search-input');
             const button = document.getElementById('search-button');
+            const accentMode = document.getElementById('search-accent-mode');
             const content = document.getElementById('grammar-container');
             let currentMatchIndex = -1;
             let matches = [];
+
             function clearHighlights() {
                 content.querySelectorAll('mark').forEach(mark => {
                     const parent = mark.parentNode;
@@ -137,72 +135,133 @@ async function loadGrammar() {
                     parent.normalize();
                 });
             }
+
+            // Normalize text for searching while retaining a map back to the original
+            // UTF-16 character positions, so highlighted text keeps its Greek accents.
+            function normalizeWithMap(value, ignoreAccents) {
+                let normalized = '';
+                const originalStarts = [];
+                const originalEnds = [];
+                let sourceOffset = 0;
+
+                for (const character of value) {
+                    const originalStart = sourceOffset;
+                    sourceOffset += character.length;
+
+                    let piece = character.normalize('NFD').toLocaleLowerCase();
+                    if (ignoreAccents) {
+                        piece = piece.replace(/\p{M}/gu, '');
+                    }
+                    // Treat Greek final sigma and ordinary sigma as equivalent in search.
+                    piece = piece.replace(/ς/g, 'σ');
+
+                    // When a decomposed accent is removed, extend the preceding
+                    // character's mapped range so the whole grapheme is highlighted.
+                    if (!piece && ignoreAccents && originalEnds.length > 0) {
+                        originalEnds[originalEnds.length - 1] = sourceOffset;
+                    }
+
+                    for (const normalizedCharacter of piece) {
+                        normalized += normalizedCharacter;
+                        for (let i = 0; i < normalizedCharacter.length; i++) {
+                            originalStarts.push(originalStart);
+                            originalEnds.push(sourceOffset);
+                        }
+                    }
+                }
+                return { text: normalized, starts: originalStarts, ends: originalEnds };
+            }
+
             function highlightText(query) {
                 clearHighlights();
-                if (!query.trim()) {
-                    matches = [];
-                    currentMatchIndex = -1;
-                    return;
-                }
-                const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const searchRegex = new RegExp(escaped, 'gi');
-                const testRegex = new RegExp(escaped, 'i');
+                matches = [];
+                currentMatchIndex = -1;
+
+                if (!query.trim()) return;
+
+                const ignoreAccents = accentMode.value === 'insensitive';
+                const normalizedQuery = normalizeWithMap(query, ignoreAccents).text;
+                if (!normalizedQuery) return;
+
+                const escaped = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const searchRegex = new RegExp(escaped, 'g');
                 const walker = document.createTreeWalker(
                     content,
                     NodeFilter.SHOW_TEXT,
                     {
                         acceptNode(node) {
-                            if (node.parentNode.tagName === 'SCRIPT' ||
-                                node.parentNode.tagName === 'STYLE' ||
-                                node.parentNode.closest('.search-container') ||
-                                node.parentNode.closest('.site-header')) {
+                            const parent = node.parentNode;
+                            if (!parent ||
+                                parent.tagName === 'SCRIPT' ||
+                                parent.tagName === 'STYLE' ||
+                                parent.closest('.search-container') ||
+                                parent.closest('.site-header')) {
                                 return NodeFilter.FILTER_REJECT;
                             }
-                            return testRegex.test(node.textContent)
-                                ? NodeFilter.FILTER_ACCEPT
-                                : NodeFilter.FILTER_SKIP;
+                            return NodeFilter.FILTER_ACCEPT;
                         }
                     }
                 );
+
                 const nodesToProcess = [];
                 let node;
                 while ((node = walker.nextNode())) {
                     nodesToProcess.push(node);
                 }
+
                 nodesToProcess.forEach(textNode => {
-                    const parent = textNode.parentNode;
-                    const frag = document.createDocumentFragment();
-                    let text = textNode.textContent;
-                    let lastIndex = 0;
+                    const originalText = textNode.textContent;
+                    const mapped = normalizeWithMap(originalText, ignoreAccents);
+                    if (!mapped.text) return;
+
+                    const fragment = document.createDocumentFragment();
+                    let lastOriginalIndex = 0;
                     searchRegex.lastIndex = 0;
                     let match;
-                    while ((match = searchRegex.exec(text)) !== null) {
-                        if (match.index > lastIndex) {
-                            frag.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+
+                    while ((match = searchRegex.exec(mapped.text)) !== null) {
+                        const normalizedStart = match.index;
+                        const normalizedEnd = searchRegex.lastIndex - 1;
+                        const originalStart = mapped.starts[normalizedStart];
+                        const originalEnd = mapped.ends[normalizedEnd];
+
+                        if (originalStart === undefined || originalEnd === undefined || originalStart < lastOriginalIndex) {
+                            continue;
                         }
+
+                        if (originalStart > lastOriginalIndex) {
+                            fragment.appendChild(document.createTextNode(
+                                originalText.slice(lastOriginalIndex, originalStart)
+                            ));
+                        }
+
                         const mark = document.createElement('mark');
-                        mark.textContent = match[0];
-                        frag.appendChild(mark);
-                        lastIndex = searchRegex.lastIndex;
-                        if (match[0].length === 0) searchRegex.lastIndex++;
+                        mark.textContent = originalText.slice(originalStart, originalEnd);
+                        fragment.appendChild(mark);
+                        lastOriginalIndex = originalEnd;
                     }
-                    if (lastIndex < text.length) {
-                        frag.appendChild(document.createTextNode(text.slice(lastIndex)));
+
+                    if (lastOriginalIndex === 0) return;
+                    if (lastOriginalIndex < originalText.length) {
+                        fragment.appendChild(document.createTextNode(originalText.slice(lastOriginalIndex)));
                     }
-                    parent.replaceChild(frag, textNode);
+                    textNode.parentNode.replaceChild(fragment, textNode);
                 });
+
                 matches = Array.from(content.querySelectorAll('mark'));
-                currentMatchIndex = -1;
             }
+
             function goToNextMatch() {
                 if (matches.length === 0) return;
                 currentMatchIndex = (currentMatchIndex + 1) % matches.length;
                 matches[currentMatchIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+
             input.addEventListener('input', () => highlightText(input.value));
-            input.addEventListener('keydown', e => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
+            accentMode.addEventListener('change', () => highlightText(input.value));
+            input.addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
                     if (matches.length > 0) goToNextMatch();
                 }
             });
@@ -227,6 +286,7 @@ async function loadGrammar() {
         window.addEventListener('scroll', () => {
             clearTimeout(scrollTimeout);
             scrollTimeout = setTimeout(() => {
+                if (window.scrollY <= 100) return;
                 const pairs = document.querySelectorAll('.section-pair');
                 let current = null;
                 const scrollPos = window.scrollY + 120;
@@ -245,35 +305,73 @@ async function loadGrammar() {
         });
         const STORAGE_KEY = 'grammar-reading-position';
         function savePosition() {
+            const scrollY = window.scrollY;
+            const englishVisible = document.body.classList.contains('english-on');
+
+            // Do not recreate a resume record for a page that is still at its
+            // untouched first-entry state after the reader chose not to resume.
+            if (scrollY <= 100 && !englishVisible) {
+                localStorage.removeItem(STORAGE_KEY);
+                return;
+            }
+
             const data = {
-                scrollY: window.scrollY,
-                englishVisible: document.body.classList.contains('english-on'),
+                scrollY: scrollY,
+                englishVisible: englishVisible,
                 timestamp: Date.now()
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
-        setInterval(savePosition, 4000);
-        window.addEventListener('beforeunload', savePosition);
+        function clearPreviousReadingState() {
+            localStorage.removeItem(STORAGE_KEY);
+            // Remove the legacy key used by the previous version as well.
+            localStorage.removeItem('grammar-english-visible');
+            englishToggle.checked = false;
+            setEnglish(false);
+            window.scrollTo(0, 0);
+            clearTimeout(scrollTimeout);
+            if (window.location.hash) {
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+        }
+
         const saved = localStorage.getItem(STORAGE_KEY);
+        let resumedPreviousSession = false;
+
+        // English visibility is restored only as part of an accepted reading session.
+        // A first visit, an expired record, or declining the prompt starts from defaults.
+        localStorage.removeItem('grammar-english-visible');
         if (saved) {
             try {
                 const data = JSON.parse(saved);
-                if (Date.now() - data.timestamp < 30 * 24 * 60 * 60 * 1000) {
-                    const want = confirm('Continue where you left off?');
-                    if (want) {
-                        if (data.englishVisible) {
-                            englishToggle.checked = true;
-                            setEnglish(true);
-                        }
-                        setTimeout(() => {
-                            window.scrollTo(0, data.scrollY || 0);
-                        }, 300);
+                const isRecent = data && Number.isFinite(data.timestamp) &&
+                    Date.now() - data.timestamp < 30 * 24 * 60 * 60 * 1000;
+
+                if (isRecent) {
+                    const wantsToResume = confirm('Continue where you left off?');
+                    if (wantsToResume) {
+                        resumedPreviousSession = true;
+                        englishToggle.checked = Boolean(data.englishVisible);
+                        setEnglish(englishToggle.checked);
+                        const savedScrollY = Number.isFinite(data.scrollY) ? Math.max(0, data.scrollY) : 0;
+                        setTimeout(() => window.scrollTo(0, savedScrollY), 300);
+                    } else {
+                        clearPreviousReadingState();
                     }
+                } else {
+                    localStorage.removeItem(STORAGE_KEY);
                 }
-            } catch (e) {
-                console.warn('Could not restore position', e);
+            } catch (error) {
+                console.warn('Could not restore position; starting from the beginning.', error);
+                localStorage.removeItem(STORAGE_KEY);
             }
         }
+
+        if (!resumedPreviousSession) {
+            goToSectionFromHash();
+        }
+        setInterval(savePosition, 4000);
+        window.addEventListener('beforeunload', savePosition);
         import("https://cdn.jsdelivr.net/npm/alpheios-embedded@latest/dist/alpheios-embedded.min.js")
             .then(() => window.AlpheiosEmbed.importDependencies({ mode: 'cdn' }))
             .then(Embedded => {
@@ -393,89 +491,121 @@ async function loadGrammar() {
                     .replace(/"/g, '&quot;')
                     .replace(/'/g, '&apos;');
             }
-            function exportPdf(sections, mode) {
-                const win = window.open('', '_blank');
-                let html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Grammatical Techne – Export</title>
-<style>
-@page {
-margin: 2cm;
-}
-body {
-font-family: "Gentium Plus", "Palatino Linotype", Palatino, Georgia, serif;
-font-size: 11pt;
-line-height: 1.55;
-color: #2c241c;
-max-width: 18cm;
-margin: 0 auto;
-}
-h1 {
-text-align: center;
-font-size: 18pt;
-letter-spacing: 0.08em;
-color: #6b3a28;
-margin-bottom: 1.8rem;
-}
-.section {
-margin-bottom: 2rem;
-page-break-inside: avoid;
-}
-h2 {
-font-size: 13pt;
-color: #6b3a28;
-border-bottom: 1px solid #d4c9b4;
-padding-bottom: 0.25rem;
-margin: 0 0 0.6rem;
-}
-h3 {
-font-size: 11.5pt;
-margin: 1rem 0 0.4rem;
-color: #5c4f42;
-}
-.body-text {
-white-space: pre-wrap;
-margin: 0 0 0.8rem;
-}
-.english-block {
-color: #5c4f42;
-font-size: 10.5pt;
-}
-@media print {
-body { padding: 0; }
-}
-</style>
-</head>
-<body>
-<h1>GRAMMATICAL TECHNE</h1>
-`;
-                sections.forEach(s => {
-                    html += `<div class="section">
-<h2>§ ${s.n}</h2>`;
+            async function exportPdf(sections, mode) {
+                if (typeof window.html2pdf !== 'function') {
+                    throw new Error('The PDF library did not load. Check your internet connection and reload the page.');
+                }
+
+                const pdfRoot = document.createElement('article');
+                pdfRoot.className = 'pdf-export-document';
+                Object.assign(pdfRoot.style, {
+                    position: 'absolute',
+                    left: '-10000px',
+                    top: '0',
+                    width: '760px',
+                    padding: '48px',
+                    background: '#ffffff',
+                    color: '#2c241c',
+                    fontFamily: '"Gentium Plus", "Palatino Linotype", Palatino, Georgia, serif',
+                    fontSize: '15px',
+                    lineHeight: '1.55'
+                });
+
+                const title = document.createElement('h1');
+                title.textContent = 'GRAMMATICAL TECHNE';
+                Object.assign(title.style, {
+                    margin: '0 0 28px',
+                    textAlign: 'center',
+                    fontSize: '25px',
+                    letterSpacing: '0.08em',
+                    color: '#6b3a28'
+                });
+                pdfRoot.appendChild(title);
+
+                sections.forEach(sectionData => {
+                    const section = document.createElement('section');
+                    section.className = 'pdf-section';
+                    Object.assign(section.style, {
+                        marginBottom: '30px',
+                        breakInside: 'auto',
+                        pageBreakInside: 'auto'
+                    });
+
+                    const sectionHeading = document.createElement('h2');
+                    sectionHeading.textContent = `§ ${sectionData.n}`;
+                    Object.assign(sectionHeading.style, {
+                        margin: '0 0 10px',
+                        paddingBottom: '4px',
+                        borderBottom: '1px solid #d4c9b4',
+                        color: '#6b3a28',
+                        fontSize: '18px',
+                        breakAfter: 'avoid',
+                        pageBreakAfter: 'avoid'
+                    });
+                    section.appendChild(sectionHeading);
+
+                    function appendTextBlock(headingText, bodyText, isEnglish = false) {
+                        const heading = document.createElement('h3');
+                        heading.textContent = headingText;
+                        Object.assign(heading.style, {
+                            margin: '16px 0 6px',
+                            color: '#5c4f42',
+                            fontSize: '15px',
+                            breakAfter: 'avoid',
+                            pageBreakAfter: 'avoid'
+                        });
+                        section.appendChild(heading);
+
+                        const body = document.createElement('div');
+                        body.textContent = bodyText;
+                        Object.assign(body.style, {
+                            margin: '0 0 12px',
+                            whiteSpace: 'pre-wrap',
+                            overflowWrap: 'break-word',
+                            color: isEnglish ? '#5c4f42' : '#2c241c',
+                            fontSize: isEnglish ? '14px' : '15px'
+                        });
+                        section.appendChild(body);
+                    }
+
                     if (mode !== 'english') {
-                        html += `
-<h3>${escapeHtml(s.greekHead)}</h3>
-<div class="body-text">${escapeHtml(s.greek)}</div>`;
+                        appendTextBlock(sectionData.greekHead, sectionData.greek, false);
                     }
                     if (mode !== 'greek') {
-                        html += `
-<h3>${escapeHtml(s.engHead)}</h3>
-<div class="body-text english-block">${escapeHtml(s.english)}</div>`;
+                        appendTextBlock(sectionData.engHead, sectionData.english, true);
                     }
-                    html += `</div>`;
+                    pdfRoot.appendChild(section);
                 });
-                html += `
-<script>
-window.onload = function () {
-setTimeout(function () { window.print(); }, 300);
-};
-<\/script>
-</body>
-</html>`;
-                win.document.write(html);
-                win.document.close();
+
+                document.body.appendChild(pdfRoot);
+                try {
+                    if (document.fonts && document.fonts.ready) {
+                        await document.fonts.ready;
+                    }
+
+                    const options = {
+                        margin: [14, 14, 14, 14],
+                        filename: `grammatical-techne-${mode}.pdf`,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: {
+                            scale: 2,
+                            useCORS: true,
+                            backgroundColor: '#ffffff',
+                            logging: false,
+                            windowWidth: 860
+                        },
+                        jsPDF: {
+                            unit: 'mm',
+                            format: 'a4',
+                            orientation: 'portrait'
+                        },
+                        pagebreak: { mode: ['css', 'legacy'] }
+                    };
+
+                    await window.html2pdf().set(options).from(pdfRoot).save();
+                } finally {
+                    pdfRoot.remove();
+                }
             }
             function escapeHtml(str) {
                 return str
@@ -491,7 +621,10 @@ setTimeout(function () { window.print(); }, 300);
                     const format = btn.dataset.format;
                     const sections = getSectionData();
                     if (format === 'pdf') {
-                        exportPdf(sections, mode);
+                        exportPdf(sections, mode).catch(error => {
+                            console.error('PDF export failed:', error);
+                            alert('The PDF could not be created. Check your internet connection and try again.');
+                        });
                         return;
                     }
                     let content, mime, ext;
