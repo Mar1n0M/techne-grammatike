@@ -21,6 +21,11 @@
                     id='greek-keyboard-btn'
                     title='Open Ancient Greek keyboard'>ΑΒΓ</a>
                 <input type='text' id='search-input' placeholder='Search Greek or English…' autocomplete='off' spellcheck='false'>
+                <label for='search-accent-mode' class='search-accent-label'>Greek accents:</label>
+                <select id='search-accent-mode' title='Choose whether Greek diacritics must match'>
+                    <option value='sensitive'>Match accents</option>
+                    <option value='insensitive'>Ignore accents</option>
+                </select>
                 <button type='button' id='search-button'>Find</button>
             </div>
             <div id='section-nav'>
@@ -50,7 +55,14 @@
         </div>
     </header>
     <div id="grammar-container"></div>
+    <footer class='site-footer' id='site-footer'>
+        <p>Created by Marino Marinović, 2026</p>
+        <p>The Greek text: https://el.wikisource.org/wiki/Τέχνη_Γραμματική</p>
+        <p>The English translation is by Thomas Davidson, originally published as “The Grammar of Dionysios Thrax,” The Journal of Speculative Philosophy 8, no. 4 (October 1874), pp. 326–339.</p>
+        <p><a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC BY-SA 4.0</a></p>
+    </footer>
     <button id='back-to-top' title='Return to top'>↑</button>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'></script>
     <script src='grammScr.js'></script>
 </body>
 </html>
