@@ -124,6 +124,23 @@ h1 {
     background: #ffffff;
     border-color: #333333;
 }
+.search-accent-label {
+    margin-left: 4px;
+    font-family: var(--sans);
+    font-size: 10px;
+    color: #dddddd;
+    white-space: nowrap;
+}
+#search-accent-mode {
+    height: 25px;
+    padding: 1px 3px;
+    font-family: var(--serif);
+    font-size: 12px;
+    color: #000000;
+    background: #ffffff;
+    border: 1px solid #555555;
+    border-radius: 0;
+}
 #greek-keyboard-btn {
     display: inline-block;
     width: 25px;
@@ -398,6 +415,10 @@ hr {
     }
     .search-container {
         margin-bottom: 6px;
+        flex-wrap: wrap;
+    }
+    .search-accent-label {
+        margin-left: 0;
     }
     #section-nav {
         margin-top: 6px;
