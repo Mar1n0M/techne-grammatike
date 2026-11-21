@@ -628,45 +628,51 @@ async function loadGrammar() {
                     throw new Error('The PDF library did not load. Check your internet connection and reload the page.');
                 }
 
-                /* ------------------------------------------------------------------
-                   Build the printable document.
+                /*
+                   A4 page width: 210 mm.
+                   Left and right margins: 14 mm each.
+                   Available document width: 182 mm.
 
-                   The element MUST stay in the normal document flow at a real,
-                   on-screen position. html2pdf.js moves the source element into
-                   its own rendering container before calling html2canvas.
-
-                   The document is limited to 760px on screen, but the cloned
-                   document is resized to 100% of the actual printable page width.
-                   This prevents the fixed-width export document from overflowing
-                   the A4 page and having its contents clipped.
-                ------------------------------------------------------------------ */
+                   The export document therefore has an explicit physical width
+                   matching the printable area. It does not rely on percentage
+                   widths or automatic centering in html2pdf's cloned container.
+                */
 
                 const pdfRoot = document.createElement('article');
                 pdfRoot.className = 'pdf-export-document';
 
                 Object.assign(pdfRoot.style, {
                     position: 'relative',
-                    left: 'auto',
+                    left: '0',
                     top: 'auto',
-                    width: '100%',
-                    maxWidth: '760px',
-                    margin: '0 auto',
+                    width: '182mm',
+                    maxWidth: '182mm',
+                    margin: '0',
                     padding: '48px',
                     background: '#ffffff',
                     color: '#2c241c',
                     fontFamily: '"Gentium Plus", "Palatino Linotype", Palatino, Georgia, serif',
                     fontSize: '15px',
                     lineHeight: '1.55',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    overflow: 'visible'
                 });
 
                 const title = document.createElement('h1');
                 title.textContent = 'GRAMMATICAL TECHNE';
 
                 Object.assign(title.style, {
+                    display: 'block',
+                    width: '100%',
+                    boxSizing: 'border-box',
                     margin: '0 0 28px',
+                    padding: '0',
                     textAlign: 'center',
+                    whiteSpace: 'nowrap',
+                    overflow: 'visible',
+                    fontFamily: '"Gentium Plus", "Palatino Linotype", Palatino, Georgia, serif',
                     fontSize: '25px',
+                    fontWeight: 'bold',
                     letterSpacing: '0.08em',
                     color: '#6b3a28'
                 });
@@ -739,7 +745,7 @@ async function loadGrammar() {
 
                 document.body.appendChild(pdfRoot);
 
-                // Force a synchronous layout so html2pdf clones a fully laid-out tree.
+                // Force layout before html2pdf clones the element.
                 void pdfRoot.getBoundingClientRect();
 
                 try {
@@ -751,8 +757,10 @@ async function loadGrammar() {
                         margin: [14, 14, 14, 14],
                         filename: `grammatical-techne-${mode}.pdf`,
                         image: { type: 'jpeg', quality: 0.98 },
+
                         html2canvas: {
                             scale: 2,
+                            width: 688,
                             useCORS: true,
                             backgroundColor: '#ffffff',
                             logging: false,
@@ -760,28 +768,39 @@ async function loadGrammar() {
                             scrollY: 0,
                             windowWidth: 900,
 
-                            // Ensure that the cloned document fits the printable
-                            // page width rather than retaining its original width.
                             onclone: clonedDoc => {
                                 const root = clonedDoc.querySelector('.pdf-export-document');
 
                                 if (root) {
                                     root.style.position = 'static';
-                                    root.style.left = 'auto';
+                                    root.style.left = '0';
                                     root.style.top = 'auto';
-                                    root.style.width = '100%';
-                                    root.style.maxWidth = '100%';
+                                    root.style.width = '182mm';
+                                    root.style.maxWidth = '182mm';
                                     root.style.margin = '0';
                                     root.style.boxSizing = 'border-box';
                                     root.style.transform = 'none';
+                                    root.style.overflow = 'visible';
+
+                                    const clonedTitle = root.querySelector('h1');
+
+                                    if (clonedTitle) {
+                                        clonedTitle.style.display = 'block';
+                                        clonedTitle.style.width = '100%';
+                                        clonedTitle.style.textAlign = 'center';
+                                        clonedTitle.style.whiteSpace = 'nowrap';
+                                        clonedTitle.style.overflow = 'visible';
+                                    }
                                 }
                             }
                         },
+
                         jsPDF: {
                             unit: 'mm',
                             format: 'a4',
                             orientation: 'portrait'
                         },
+
                         pagebreak: { mode: ['css', 'legacy'] }
                     };
 
