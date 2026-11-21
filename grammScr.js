@@ -497,29 +497,57 @@ async function loadGrammar() {
                 }
 
                 /* ------------------------------------------------------------------
-                   Build the printable document.
+                   Work out the printable area of the page first.
 
-                   The element MUST stay in the normal document flow at a real,
-                   on-screen position. html2pdf.js moves the source element into
-                   its own rendering container before calling html2canvas; any
-                   inline `position:absolute; left:-10000px` travels with it and
-                   places the content outside the captured area -> blank PDF.
+                   html2pdf measures everything in CSS pixels, drops the source
+                   element into a fixed-size capture container (the page's inner
+                   width) and only afterwards scales that canvas down to the paper
+                   width. If the exported element is wider than that container, or
+                   if it is centred with automatic margins, the container's
+                   overflow clipping shifts the content sideways and text is cut
+                   off on the left edge of the resulting PDF.
+
+                   Sizing the export root explicitly to the printable width - and
+                   keeping every margin at zero so nothing can move it sideways -
+                   guarantees the whole column lands inside the page.
+
+                   The element also has to stay in the normal document flow at a
+                   real, on-screen position: html2pdf.js moves the source element
+                   into its own rendering container before calling html2canvas, so
+                   any inline `position:absolute; left:-10000px` travels with it
+                   and places the content outside the captured area.
                 ------------------------------------------------------------------ */
+                const PAGE_WIDTH_MM = 210;
+                const PAGE_HEIGHT_MM = 297;
+                const PAGE_MARGIN_MM = 14;
+                const MM_TO_PX = 96 / 25.4;
+                // A4 printable width in CSS px, minus a couple of pixels of
+                // rounding headroom so the right edge is never clipped either.
+                const printableWidthPx = Math.floor(
+                    (PAGE_WIDTH_MM - PAGE_MARGIN_MM * 2) * MM_TO_PX
+                ) - 4;
+
                 const pdfRoot = document.createElement('article');
                 pdfRoot.className = 'pdf-export-document';
                 Object.assign(pdfRoot.style, {
                     position: 'relative',
-                    left: 'auto',
-                    top: 'auto',
-                    width: '760px',
-                    margin: '0 auto',
-                    padding: '48px',
+                    left: '0',
+                    top: '0',
+                    right: 'auto',
+                    bottom: 'auto',
+                    width: printableWidthPx + 'px',
+                    minWidth: printableWidthPx + 'px',
+                    maxWidth: printableWidthPx + 'px',
+                    margin: '0',
+                    padding: '24px 28px',
                     background: '#ffffff',
                     color: '#2c241c',
                     fontFamily: '"Gentium Plus", "Palatino Linotype", Palatino, Georgia, serif',
                     fontSize: '15px',
                     lineHeight: '1.55',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    transform: 'none',
+                    float: 'none'
                 });
 
                 const title = document.createElement('h1');
@@ -598,7 +626,7 @@ async function loadGrammar() {
                     }
 
                     const options = {
-                        margin: [14, 14, 14, 14],
+                        margin: [PAGE_MARGIN_MM, PAGE_MARGIN_MM, PAGE_MARGIN_MM, PAGE_MARGIN_MM],
                         filename: `grammatical-techne-${mode}.pdf`,
                         image: { type: 'jpeg', quality: 0.98 },
                         html2canvas: {
@@ -608,17 +636,26 @@ async function loadGrammar() {
                             logging: false,
                             scrollX: 0,
                             scrollY: 0,
-                            windowWidth: 900,
+                            windowWidth: Math.max(printableWidthPx + 80, window.innerWidth || 1024),
+                            windowHeight: Math.max(800, window.innerHeight || 800),
                             // Belt-and-braces: whatever html2pdf does with the clone,
-                            // pin the export root to the top-left of the capture area.
+                            // pin the export root to the top-left of the capture area
+                            // and lock its width so it cannot be pushed sideways or
+                            // clipped by the capture container.
                             onclone: clonedDoc => {
                                 const root = clonedDoc.querySelector('.pdf-export-document');
                                 if (root) {
                                     root.style.position = 'static';
-                                    root.style.left = 'auto';
-                                    root.style.top = 'auto';
+                                    root.style.left = '0';
+                                    root.style.top = '0';
+                                    root.style.right = 'auto';
+                                    root.style.bottom = 'auto';
                                     root.style.margin = '0';
                                     root.style.transform = 'none';
+                                    root.style.float = 'none';
+                                    root.style.width = printableWidthPx + 'px';
+                                    root.style.minWidth = printableWidthPx + 'px';
+                                    root.style.maxWidth = printableWidthPx + 'px';
                                 }
                             }
                         },
